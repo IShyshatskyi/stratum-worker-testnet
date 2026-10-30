@@ -1,0 +1,30 @@
+[package]
+name        = "stratum-worker"
+version     = "0.1.0"
+edition     = "2021"
+description = "SP-18: Standalone Stratum V2 PoW worker for cloud-CPU E2E testing"
+publish     = false
+
+[[bin]]
+name = "stratum-worker"
+path = "src/main.rs"
+
+[dependencies]
+# Noise_NX handshake — same crate as the pool server
+snow         = "0.9"
+# Parallel inner PoW loop
+rayon        = "1"
+# Async TCP + time
+tokio        = { version = "1", features = ["full"] }
+# SHA-256 / SHA-256d
+sha2         = "0.10"
+# Hex encoding for pool pubkey parsing
+hex          = "0.4"
+# Serialised JSON stats output
+serde_json   = "1"
+serde        = { version = "1", features = ["derive"] }
+# Logging
+log          = "0.4"
+env_logger   = "0.11"
+# Error handling
+anyhow       = "1"

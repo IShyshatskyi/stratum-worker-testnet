@@ -1,0 +1,25 @@
+# Public packaging denylist. Used by check_public_boundary.sh.
+# Maintainer extras: scripts/local/extra_denylist.txt (gitignored).
+#
+# [paths]  — forbidden path substrings under synced content (src/, Dockerfile, Cargo.toml)
+# [cargo]  — forbidden substrings in Cargo.toml
+
+[paths]
+crates/
+tools/
+ledger-app
+kameniar
+keystone
+eratosthenes
+common-types
+p2p-proto
+
+[cargo]
+path = "../../
+path = "../crates
+path = "../common-types
+path = "../p2p-proto
+package = "shisha
+package = "kameniar
+package = "common-types
+package = "p2p-proto

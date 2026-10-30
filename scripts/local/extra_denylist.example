@@ -1,0 +1,8 @@
+# Optional maintainer-only denylist merged by check_public_boundary.sh.
+# Copy to extra_denylist.txt (gitignored).
+
+[paths]
+# e.g. crates/private-thing
+
+[cargo]
+# e.g. package = "private-crate"

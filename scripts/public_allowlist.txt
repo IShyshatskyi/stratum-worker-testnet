@@ -1,0 +1,10 @@
+# Expected public tree after sync (documentation). Paths relative to repo root.
+# Default sync policy: only tools/stratum-worker/ contents + packaging overlays.
+README.md
+VERSION
+.gitignore
+LICENSE
+Cargo.toml
+Dockerfile
+src/
+scripts/

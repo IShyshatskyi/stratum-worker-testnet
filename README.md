@@ -1,43 +1,62 @@
 # stratum-worker-testnet
 
-Public **test-network packaging** stub for **stratum-worker** — the MIT Stratum V2 CPU
+Public **test-network packaging** for **stratum-worker** — the MIT Stratum V2 CPU
 worker used to connect to a published HCRN / Heaviest Chain Rule testnet pool.
 
 > **This is not Filament.** Do not look for binaries under
 > [`filament-testnet/releases`](https://github.com/IShyshatskyi/filament-testnet/releases).
 > Filament-testnet is the light-client packaging repo only.
 
-## Status (2026-10)
+## Status
 
 | Item | State |
 |------|--------|
-| Public source tree | **Not synced yet** — this README is a placeholder |
-| GitHub Releases / binaries | **None** — download unavailable |
-| Pool endpoint | Published per round on the marketing [Testnet](https://heaviest-chain.netlify.app/Testnet.html#mine) page |
+| Sync from private monorepo | `./scripts/sync_stratum_worker_public.sh` |
+| GitHub Releases / binaries | **None** until a tagged release is cut here |
+| Pool endpoint | [Testnet](https://heaviest-chain.netlify.app/Testnet.html#mine) when a round is live |
 
-When source lands here, the intended flow is: clone → build in an environment you
-control → point `POOL_ENDPOINT` / `WALLET_ADDRESS` at the live Stratum URL.
+## Sync from the private monorepo (maintainers)
 
-## Planned layout (when synced)
-
-```text
-stratum-worker-testnet/
-  README.md          ← you are here
-  LICENSE            ← MIT
-  Cargo.toml
-  src/               ← stratum-worker binary
-  docs/              ← connect + env vars
-```
-
-Illustrative env (values from Testnet when a round is live — do not invent hosts):
+Same pattern as [`filament-testnet`](https://github.com/IShyshatskyi/filament-testnet)
+`scripts/sync_filament_public.sh`: run **inside this public clone**, point at a local
+shisha checkout that contains `tools/stratum-worker/`.
 
 ```bash
-export POOL_ENDPOINT=HOST:3336
+cp scripts/local/upstream.env.example scripts/local/upstream.env
+# set SHISHA=/absolute/path/to/shisha
+
+./scripts/sync_stratum_worker_public.sh --status
+./scripts/sync_stratum_worker_public.sh --dry-run
+./scripts/sync_stratum_worker_public.sh --apply
+
+./scripts/check_public_boundary.sh
+```
+
+`sync_from_shisha.sh` is an alias for the same script.
+
+What `--apply` does:
+
+1. `rsync` `$SHISHA/tools/stratum-worker/` → this repo root  
+2. Restores packaging overlays (`README.md`, `scripts/`, `LICENSE`, …) from `keep_public.txt`  
+3. Writes `VERSION` (`SYNCED_FROM_SHISHA=<git sha>`)  
+4. Runs `check_public_boundary.sh` and an advisory `cargo check`
+
+## Build (after sync)
+
+```bash
+cargo build --release
+export POOL_ENDPOINT=HOST:3336          # from Testnet
 export WALLET_ADDRESS=0xYOUR_64_HEX_RECIPIENT
 export WORKER_NAME=rig-1
-export THREADS=2
-# ./target/release/stratum-worker
+./target/release/stratum-worker
 ```
+
+Prefer building in an environment you control if you do not trust the tree yet.
+
+## Releases
+
+**GitHub Releases for this product belong only on this repository.**  
+Empty Releases means “no binary drop yet,” not “go look at Filament.”
 
 ## Relation to other repos
 
@@ -45,19 +64,9 @@ export THREADS=2
 |------|---------|
 | [`filament-testnet`](https://github.com/IShyshatskyi/filament-testnet) | MMR light client |
 | **`stratum-worker-testnet`** (this repo) | Pool worker |
-| [`hcrn-ledger-app`](https://github.com/IShyshatskyi/hcrn-ledger-app) | Ledger Nano app stub |
-| Private monorepo | Protocol source of truth; workers may sync from `tools/stratum-worker/` |
-
-## Releases
-
-**GitHub Releases for this product belong only on this repository** once artifacts exist.
-Empty Releases here means “no binary drop yet,” not “go look at Filament.”
+| [`hcrn-ledger-app`](https://github.com/IShyshatskyi/hcrn-ledger-app) | Ledger Nano app |
+| Private monorepo `tools/stratum-worker/` | Upstream source of truth |
 
 ## Licence
 
-MIT (intended). Licence file will ship with the first source sync.
-
-## Links
-
-- Marketing Downloads: https://heaviest-chain.netlify.app/Downloads.html  
-- Live pool / wallet env: https://heaviest-chain.netlify.app/Testnet.html#mine  
+MIT — see [`LICENSE`](LICENSE).

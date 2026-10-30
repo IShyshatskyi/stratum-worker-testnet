@@ -1,0 +1,14 @@
+# After rsync from upstream, restore these public packaging overlays.
+# Paths relative to this repo root. Files only (directories are protected by rsync P filters).
+README.md
+.gitignore
+LICENSE
+scripts/sync_stratum_worker_public.sh
+scripts/sync_from_shisha.sh
+scripts/check_public_boundary.sh
+scripts/public_allowlist.txt
+scripts/public_denylist.txt
+scripts/keep_public.txt
+scripts/local/README.md
+scripts/local/upstream.env.example
+scripts/local/extra_denylist.example
