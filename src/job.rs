@@ -263,11 +263,70 @@ impl Job {
         }
         false
     }
+
+    /// Hex of the Stratum share target currently enforced (`OpenChannel.Success`
+    /// / `SetTarget`). Same byte order the worker compares hashes against.
+    pub fn share_target_hex(&self) -> String {
+        hex::encode(self.target)
+    }
+
+    /// Pool-style difficulty scalar for logs: `max_target / share_target`
+    /// with the testnet-stress / CPU ceiling `max_target = 2^240`
+    /// (`[0, 1, 0, …]`). Matches `calculate_difficulty_with_max_target` on
+    /// that ceiling — not Bitcoin's `2^256/target` display. Distinct from
+    /// `header_bits` (chain work / rBits on the 80-byte header).
+    pub fn share_difficulty(&self) -> u64 {
+        difficulty_vs_2_240(&self.target)
+    }
+}
+
+/// testnet-stress `GENESIS_MAX_TARGET` / CPU worker ceiling: `2^240`.
+pub(crate) const MAX_TARGET_2_240: [u8; 32] = {
+    let mut m = [0u8; 32];
+    m[1] = 1;
+    m
+};
+
+/// `⌊2^240 / target⌋`, saturating to `u64::MAX`, minimum 1 when target ≥ max.
+pub fn difficulty_vs_2_240(target: &[u8; 32]) -> u64 {
+    if target.iter().all(|&b| b == 0) {
+        return u64::MAX;
+    }
+    if target.as_slice() >= MAX_TARGET_2_240.as_slice() {
+        return 1;
+    }
+    // Binary search q in 1..=u64::MAX such that q * target <= 2^240.
+    let mut lo = 1u64;
+    let mut hi = u64::MAX;
+    while lo < hi {
+        let mid = lo + (hi - lo + 1) / 2;
+        if mul_u256_u64_le(target, mid, &MAX_TARGET_2_240) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    lo
+}
+
+/// True iff `factor * den` (big-endian u256) fits in 256 bits and is ≤ `num`.
+fn mul_u256_u64_le(den: &[u8; 32], factor: u64, num: &[u8; 32]) -> bool {
+    let mut out = [0u8; 32];
+    let mut carry = 0u128;
+    for i in (0..32).rev() {
+        let v = den[i] as u128 * factor as u128 + carry;
+        out[i] = (v & 0xff) as u8;
+        carry = v >> 8;
+    }
+    if carry != 0 {
+        return false;
+    }
+    out.as_slice() <= num.as_slice()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Job;
+    use super::{difficulty_vs_2_240, Job, MAX_TARGET_2_240};
 
     fn sample_snph(job_id: u32, prev_byte: u8) -> Vec<u8> {
         let mut data = vec![0u8; 52];
@@ -394,5 +453,16 @@ mod tests {
         let job_b = Job::from_new_mining_job(&sample_nmj(1, 1, 0xAA), &[2, 0, 0, 0]).unwrap();
         job_a.extranonce_prefix = [1, 0, 0, 0];
         assert_ne!(job_a.commitment_hash(), job_b.commitment_hash());
+    }
+
+    #[test]
+    fn share_difficulty_vs_2_240_known_values() {
+        assert_eq!(difficulty_vs_2_240(&MAX_TARGET_2_240), 1);
+        // 2^234 = 2^240 / 64
+        let mut t64 = [0u8; 32];
+        t64[2] = 0x04;
+        assert_eq!(difficulty_vs_2_240(&t64), 64);
+        // Soft all-ones target → difficulty 1
+        assert_eq!(difficulty_vs_2_240(&[0xff; 32]), 1);
     }
 }

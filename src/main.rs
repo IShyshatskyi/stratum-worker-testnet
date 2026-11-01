@@ -14,7 +14,7 @@
 //                       "{WALLET_ADDRESS}.{WORKER_NAME}" so the pool can pay
 //                       that wallet when coinbase_pays_worker_wallet is on
 //   THREADS           — Rayon thread pool size (default: auto-detect)
-//   LOG_INTERVAL_SECS — stats log cadence in seconds (default: 30)
+//   LOG_INTERVAL_SECS — stats log cadence in seconds (default: 120)
 
 mod connection;
 mod job;
@@ -24,11 +24,18 @@ mod sv2_codec;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use serde_json::json;
 use tokio::time::sleep;
+
+fn unix_ts_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -81,7 +88,7 @@ impl Config {
         let log_interval_secs = std::env::var("LOG_INTERVAL_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(30u64);
+            .unwrap_or(120u64);
 
         Ok(Self { endpoint, server_pubkey, worker_name, log_interval_secs })
     }
@@ -94,6 +101,8 @@ impl Config {
 struct Stats {
     hashes_computed: AtomicU64,
     shares_submitted: AtomicU64,
+    /// Last Stratum share difficulty (`⌊2^240 / target⌋`).
+    share_difficulty: AtomicU64,
 }
 
 impl Stats {
@@ -101,6 +110,7 @@ impl Stats {
         Arc::new(Self {
             hashes_computed:  AtomicU64::new(0),
             shares_submitted: AtomicU64::new(0),
+            share_difficulty: AtomicU64::new(0),
         })
     }
 }
@@ -127,16 +137,21 @@ async fn main() -> Result<()> {
                 sleep(Duration::from_secs(cadence)).await;
                 let hashes = stats.hashes_computed.load(Ordering::Relaxed);
                 let shares = stats.shares_submitted.load(Ordering::Relaxed);
+                let share_diff = stats.share_difficulty.load(Ordering::Relaxed);
                 let elapsed = last_at.elapsed().as_secs_f64().max(0.001);
                 let hashrate = (hashes - last_hashes) as f64 / elapsed;
                 last_hashes = hashes;
                 last_at     = Instant::now();
+                // log::info (not bare println) so env_logger adds the same UTC
+                // prefix as Share found / connect lines; `ts` is also in JSON.
                 let msg = json!({
+                    "ts":               unix_ts_secs(),
                     "hashrate_hps":     hashrate as u64,
                     "shares_submitted": shares,
                     "total_hashes":     hashes,
+                    "share_difficulty": share_diff,
                 });
-                println!("{msg}");
+                log::info!("{msg}");
             }
         });
     }
@@ -182,8 +197,16 @@ async fn run_session(cfg: &Config, stats: Arc<Stats>) -> Result<()> {
     );
 
     let mut job = job_watcher.wait_for_change().await?;
-    log::info!("First job received — job_id={}", job.job_id);
+    stats.share_difficulty.store(job.share_difficulty(), Ordering::Relaxed);
+    log::info!(
+        "First job received — job_id={} share_difficulty={} share_target={} header_bits={:08x}",
+        job.job_id,
+        job.share_difficulty(),
+        job.share_target_hex(),
+        job.header_bits,
+    );
     let mut last_seen_job_id = job.job_id;
+    let mut last_share_target = job.target;
 
     // Mine in small nonce batches, checking for a fresher job between every
     // batch. Job discovery itself is fully decoupled from this loop (see
@@ -241,8 +264,10 @@ async fn run_session(cfg: &Config, stats: Arc<Stats>) -> Result<()> {
         if let Some(share) = found.0 {
             log::info!(
                 "Share found! job_id={} nonce=0x{:08x} hash={} \
+                 share_difficulty={} share_target={} \
                  header[version={:08x} prev_hash={} commitment_hash={} delta={} header_bits={:08x}] ntime={}",
                 job.job_id, share.nonce, hex::encode(share.hash),
+                job.share_difficulty(), job.share_target_hex(),
                 job.version, hex::encode(job.prev_hash), hex::encode(job.commitment_hash()),
                 job.delta, job.header_bits, job.ntime,
             );
@@ -254,6 +279,15 @@ async fn run_session(cfg: &Config, stats: Arc<Stats>) -> Result<()> {
 
         // ── Non-blocking job check — pure in-memory, cannot stall hashing ─
         if let Some(new_job) = job_watcher.poll()? {
+            if new_job.target != last_share_target {
+                last_share_target = new_job.target;
+                stats.share_difficulty.store(new_job.share_difficulty(), Ordering::Relaxed);
+                log::info!(
+                    "Share target now share_difficulty={} share_target={}",
+                    new_job.share_difficulty(),
+                    new_job.share_target_hex(),
+                );
+            }
             if new_job.job_id != last_seen_job_id {
                 last_seen_job_id = new_job.job_id;
                 // CB-7 (plan §6.2): only a `clean_jobs=true` update (a real
@@ -269,16 +303,19 @@ async fn run_session(cfg: &Config, stats: Arc<Stats>) -> Result<()> {
                 // progress for no correctness reason.
                 if new_job.clean_jobs {
                     log::info!(
-                        "New job received (clean_jobs=true) — job_id={} — \
-                         discarding in-flight nonce range",
-                        new_job.job_id
+                        "New job received (clean_jobs=true) — job_id={} \
+                         share_difficulty={} — discarding in-flight nonce range",
+                        new_job.job_id,
+                        new_job.share_difficulty(),
                     );
                     nonce_start = 0;
                 } else {
-                    log::info!(
-                        "New job received (clean_jobs=false) — job_id={} — \
-                         keeping nonce search position",
-                        new_job.job_id
+                    // Shard aux updates are frequent — keep off the default INFO terminal.
+                    log::debug!(
+                        "New job received (clean_jobs=false) — job_id={} \
+                         share_difficulty={} — keeping nonce search position",
+                        new_job.job_id,
+                        new_job.share_difficulty(),
                     );
                 }
             }

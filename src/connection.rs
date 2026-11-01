@@ -130,7 +130,17 @@ fn apply_frame_to_job(
         }
         MSG_SET_TARGET => {
             if data.len() >= 36 {
-                job.target.copy_from_slice(&data[4..36]);
+                let mut new_target = [0u8; 32];
+                new_target.copy_from_slice(&data[4..36]);
+                if new_target != job.target {
+                    job.target = new_target;
+                    log::info!(
+                        "SetTarget — share_difficulty={} share_target={} \
+                         (vs max_target=2^240; distinct from header_bits)",
+                        job.share_difficulty(),
+                        job.share_target_hex(),
+                    );
+                }
             }
         }
         // SubmitSharesSuccess/Error ACKs and anything else land here and
@@ -267,6 +277,12 @@ impl StratumConnection {
             // real search time wasted submitting near-worthless attempts
             // instead of continuing toward the pool's actual difficulty.
             job.target = pool_target;
+            log::info!(
+                "OpenChannel.Success target — share_difficulty={} share_target={} \
+                 (vs max_target=2^240; distinct from header_bits)",
+                job.share_difficulty(),
+                job.share_target_hex(),
+            );
             loop {
                 match reader.recv_frame().await {
                     Ok((_ext, msg_type, data)) => {
