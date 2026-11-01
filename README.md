@@ -20,23 +20,26 @@ You need a value like `HOST:3336` (TCP). This is **not** an `http://` URL.
 
 ### 2. Download the Release binary
 
-```bash
-TAG=v0.1.0-testnet-R1
-BASE=https://github.com/IShyshatskyi/stratum-worker-testnet/releases/download/$TAG
+Copy **the whole block** (URL is inline — no `$BASE` to set first).
 
-# macOS Intel (or Rosetta):
-curl -fsSL -O "$BASE/stratum-worker-darwin-x86_64"
-curl -fsSL -O "$BASE/stratum-worker-darwin-x86_64.sha256"
+**macOS Intel (or Rosetta):**
+
+```bash
+curl -fsSL -O https://github.com/IShyshatskyi/stratum-worker-testnet/releases/download/v0.1.0-testnet-R1/stratum-worker-darwin-x86_64
+curl -fsSL -O https://github.com/IShyshatskyi/stratum-worker-testnet/releases/download/v0.1.0-testnet-R1/stratum-worker-darwin-x86_64.sha256
 shasum -a 256 -c stratum-worker-darwin-x86_64.sha256
 chmod +x stratum-worker-darwin-x86_64
 BIN=./stratum-worker-darwin-x86_64
+```
 
-# Linux x86_64:
-# curl -fsSL -O "$BASE/stratum-worker-linux-x86_64"
-# curl -fsSL -O "$BASE/stratum-worker-linux-x86_64.sha256"
-# sha256sum -c stratum-worker-linux-x86_64.sha256
-# chmod +x stratum-worker-linux-x86_64
-# BIN=./stratum-worker-linux-x86_64
+**Linux x86_64:**
+
+```bash
+curl -fsSL -O https://github.com/IShyshatskyi/stratum-worker-testnet/releases/download/v0.1.0-testnet-R1/stratum-worker-linux-x86_64
+curl -fsSL -O https://github.com/IShyshatskyi/stratum-worker-testnet/releases/download/v0.1.0-testnet-R1/stratum-worker-linux-x86_64.sha256
+sha256sum -c stratum-worker-linux-x86_64.sha256
+chmod +x stratum-worker-linux-x86_64
+BIN=./stratum-worker-linux-x86_64
 ```
 
 ### 3. Configure and run
