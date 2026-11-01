@@ -90,27 +90,27 @@ Prefer building in a VM/container you control if you do not trust a prebuilt bin
 ## Sync from the private monorepo (maintainers)
 
 Same pattern as [`filament-testnet`](https://github.com/IShyshatskyi/filament-testnet)
-`scripts/sync_filament_public.sh`: run **inside this public clone**, point at a local
-shisha checkout that contains `tools/stratum-worker/`.
+`scripts/sync_filament_public.sh`: run **inside this public clone**, and pass the path to
+a local private monorepo checkout that contains `tools/stratum-worker/`.
 
 ```bash
-cp scripts/local/upstream.env.example scripts/local/upstream.env
-# set SHISHA=/absolute/path/to/shisha
+MONOREPO=/absolute/path/to/private-monorepo
 
-./scripts/sync_stratum_worker_public.sh --status
-./scripts/sync_stratum_worker_public.sh --dry-run
-./scripts/sync_stratum_worker_public.sh --apply
+./scripts/sync_stratum_worker_public.sh --status  "$MONOREPO"
+./scripts/sync_stratum_worker_public.sh --dry-run "$MONOREPO"
+./scripts/sync_stratum_worker_public.sh --apply   "$MONOREPO"
 
 ./scripts/check_public_boundary.sh
 ```
 
-`sync_from_shisha.sh` is an alias for the same script.
+Optional: copy `scripts/local/upstream.env.example` → `scripts/local/upstream.env` and set the
+monorepo path there so you can omit the argument.
 
 What `--apply` does:
 
-1. `rsync` `$SHISHA/tools/stratum-worker/` → this repo root
+1. `rsync` `<monorepo>/tools/stratum-worker/` → this repo root
 2. Restores packaging overlays (`README.md`, `scripts/`, `LICENSE`, …) from `keep_public.txt`
-3. Writes `VERSION` (`SYNCED_FROM_SHISHA=<git sha>`)
+3. Writes `VERSION` with the upstream commit sha
 4. Runs `check_public_boundary.sh` and an advisory `cargo check`
 
 ## Releases
